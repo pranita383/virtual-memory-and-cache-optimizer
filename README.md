@@ -35,10 +35,11 @@ To set up the Virtual Memory and Cache Optimizer on your local machine, follow t
 4.**execute optimized program**
    ```bash
    ./optimizer
-5. **testing**
+5.**testing**
   ```bash
   gcc tests/test_memory_management.c -o test_memory_management
   ./test_memory_management
+
 
 ## Conclusion
 This README provides a comprehensive overview of the Virtual Memory and Cache Optimizer project, including installation instructions, usage guidelines, and contribution details. You can customize it further based on your project's specific requirements and any additional information you want to include.
