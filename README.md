@@ -23,7 +23,23 @@ To set up the Virtual Memory and Cache Optimizer on your local machine, follow t
    ```bash
    git clone https://github.com/yourusername/VirtualMemoryCacheOptimizer.git
    cd VirtualMemoryCacheOptimizer
-pip install -r requirements.txt  # For Python projects
+2. **Installing dependencies:**
+   ```bash
+   pip install -r requirements.txt  # For Python projects
+
+3. **compile the source code**
+   for c/c++
+   ```bash
+   gcc src/main/main.c -o optimizer -I src/memory_management -I src/cache_management -I src/performance_monitoring
+
+4.**execute optimized program**
+   ```bash
+   ./optimizer
+5. **testing**
+  ```bash
+  gcc tests/test_memory_management.c -o test_memory_management
+  ./test_memory_management
+
 
 
 ### Conclusion
