@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Memory and Cache Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Virtual Memory and Cache Optimizer</h1>
+        <form id="cacheForm">
+            <label for="pages">Enter Pages (comma-separated):</label>
+            <input type="text" id="pages" required>
+            <label for="cache_size">Cache Size:</label>
+            <input type="number" id="cache_size" value="3" required>
+            <button type="submit">Simulate Cache</button>
+        </form>
+        <div id="result">
+            <h2>Results</h2>
+            <p id="hits"></p>
+            <p id="misses"></p>
+            <p id="hit_ratio"></p>
+        </div>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
