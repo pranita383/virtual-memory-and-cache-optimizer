@@ -1,10 +1,12 @@
-# app/__init__.py
-
 from flask import Flask
-from app.routes import main_routes
+from flask_cors import CORS
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object('app.config.Config')
-    app.register_blueprint(main_routes)
+    CORS(app)
+
+    # Register blueprints/routes
+    from app.routes import routes
+    app.register_blueprint(routes)
+
     return app
