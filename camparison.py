@@ -16,5 +16,12 @@ def compare_memory_usage():
     
     return jsonify(comparison_data)
 
+def compare_performance(before,after):
+    return{
+        "before_ratio": before,
+        "after_ratio": after,
+        "improvement": round(((after - before)/ before)* 100, 2)
+    }
+
 if __name__ == '__main__':
     app.run(debug=True)
