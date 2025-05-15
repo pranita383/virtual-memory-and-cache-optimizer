@@ -1,90 +1,80 @@
-# 🧠 Virtual Memory and Cache Optimization Tool
+# Memory and Cache Monitor
 
-This project is a **web-based simulation tool** that demonstrates **cache optimization algorithms**—specifically the **Least Recently Used (LRU)** cache mechanism. It visualizes cache performance (hits, misses, hit ratio) and helps users understand virtual memory concepts interactively.
+A real-time monitoring tool for system memory and cache performance with optimization capabilities.
 
----
+## Features
 
-## 📌 Features
+- Real-time memory usage monitoring
+- Cache performance tracking
+- Memory optimization
+- Cache optimization
+- Interactive visualizations
+- Performance metrics tracking
 
-- 🔄 Simulates LRU cache behavior for a given set of memory pages
-- 📈 Shows cache performance metrics:
-  - Cache Hits
-  - Cache Misses
-  - Hit Ratio
-- 🧠 Easy-to-use web interface for interactive testing
-- 🗃️ Logs performance data in an SQLite database
-- 💡 Educational project combining OS, DB, and web concepts
+## Installation
 
----
-
-## 🛠️ Tech Stack
-
-| Layer       | Technology        |
-|-------------|-------------------|
-| Backend     | Python, Flask     |
-| Frontend    | HTML, CSS, JavaScript |
-| Database    | SQLite (for logging) |
-| Cache Logic | Custom LRU Implementation |
-
----
-
-## 🚀 Getting Started
-
-### 1️⃣ Clone the Repository
-
+1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/virtual-memory-cache-optimizer.git
-cd virtual-memory-cache-optimizer
+git clone <repository-url>
+cd <repository-name>
 ```
----
-2️⃣ Install Dependencies
-```bash
 
+2. Create a virtual environment (recommended):
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
 pip install -r requirements.txt
-
 ```
----
-3️⃣ Run the Application
+
+## Usage
+
+1. Start the application:
 ```bash
-
-python run.py
-```
-Visit http://127.0.0.1:5000 in your browser.
----
-🗂️ Project Structure
-```bash
-virtual-memory-cache-optimizer/
-│
-├── app/
-│   ├── __init__.py           # Initializes Flask app
-│   ├── routes.py             # API routes
-│   ├── cache_manager.py      # LRU cache logic
-│   ├── performance_logger.py # Performance logging (SQLite)
-│   └── config.py             # Flask configuration
-│
-├── templates/
-│   └── index.html            # Main web UI
-│
-├── static/
-│   ├── css/style.css         # Styling
-│   └── js/script.js          # JavaScript logic
-│
-├── run.py                    # Entry point
-├── requirements.txt          # Dependencies
-└── README.md                 # This file
-
-
+python app/comparison.py
 ```
 
----
-📚 Topics Covered
-Virtual Memory Concepts
+2. Open your web browser and navigate to:
+```
+http://localhost:5000
+```
 
-Page Replacement Algorithms (LRU)
+## Features
 
-Web Development with Flask
+### Real-time Monitoring
+- Memory usage statistics
+- Cache performance metrics
+- System performance indicators
 
-Frontend-Backend Integration
+### Optimization
+- Memory optimization with before/after comparison
+- Cache optimization with performance metrics
+- Visual representation of improvements
 
-Performance Logging with SQLite
----
+### Visualizations
+- Memory usage over time
+- Cache performance trends
+- Before/after optimization comparisons
+- Memory allocation distribution
+- System performance metrics
+
+## Error Handling
+
+The application includes comprehensive error handling:
+- Graceful degradation for system metric collection
+- Error logging
+- User-friendly error messages
+- API error responses
+
+## Requirements
+
+- Python 3.7+
+- Modern web browser with JavaScript enabled
+- System permissions for memory monitoring
+
+## License
+
+MIT License 
