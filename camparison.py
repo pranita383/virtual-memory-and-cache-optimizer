@@ -5,9 +5,15 @@ import numpy as np
 from datetime import datetime
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from simulate_before import simulate_before
-from simulate_after import simulate_after
+import logging
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Initialize Flask app
 app = Flask(__name__)
 
 class MemoryMonitor:
@@ -27,92 +33,151 @@ class MemoryMonitor:
         }
 
     def get_memory_stats(self):
-        vm = psutil.virtual_memory()
-        swap = psutil.swap_memory()
-        return {
-            'total': vm.total,
-            'available': vm.available,
-            'used': vm.used,
-            'free': vm.free,
-            'percent': vm.percent,
-            'swap_total': swap.total,
-            'swap_used': swap.used,
-            'swap_free': swap.free,
-            'swap_percent': swap.percent
-        }
+        try:
+            vm = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+            return {
+                'total': vm.total,
+                'available': vm.available,
+                'used': vm.used,
+                'free': vm.free,
+                'percent': vm.percent,
+                'swap_total': swap.total,
+                'swap_used': swap.used,
+                'swap_free': swap.free,
+                'swap_percent': swap.percent
+            }
+        except Exception as e:
+            app.logger.error(f"Error getting memory stats: {str(e)}")
+            return {
+                'total': 0,
+                'available': 0,
+                'used': 0,
+                'free': 0,
+                'percent': 0,
+                'swap_total': 0,
+                'swap_used': 0,
+                'swap_free': 0,
+                'swap_percent': 0
+            }
 
     def get_cache_stats(self):
         # Simulated cache statistics
-        return {
-            'hits': np.random.randint(80, 95),
-            'misses': np.random.randint(5, 20),
-            'hit_ratio': np.random.uniform(0.8, 0.95),
-            'access_time': np.random.uniform(0.1, 0.5),
-            'eviction_rate': np.random.uniform(0.1, 0.3),
-            'write_back_rate': np.random.uniform(0.2, 0.4)
-        }
+        try:
+            return {
+                'hits': np.random.randint(80, 95),
+                'misses': np.random.randint(5, 20),
+                'hit_ratio': np.random.uniform(0.8, 0.95),
+                'access_time': np.random.uniform(0.1, 0.5),
+                'eviction_rate': np.random.uniform(0.1, 0.3),
+                'write_back_rate': np.random.uniform(0.2, 0.4)
+            }
+        except Exception as e:
+            app.logger.error(f"Error getting cache stats: {str(e)}")
+            return {
+                'hits': 0,
+                'misses': 0,
+                'hit_ratio': 0,
+                'access_time': 0,
+                'eviction_rate': 0,
+                'write_back_rate': 0
+            }
 
     def get_performance_metrics(self):
         # Simulated performance metrics
-        return {
-            'response_time': np.random.uniform(0.1, 2.0),
-            'throughput': np.random.uniform(1000, 5000),
-            'page_faults': np.random.randint(10, 100),
-            'swap_rate': np.random.uniform(0.1, 1.0)
-        }
+        try:
+            return {
+                'response_time': np.random.uniform(0.1, 2.0),
+                'throughput': np.random.uniform(1000, 5000),
+                'page_faults': np.random.randint(10, 100),
+                'swap_rate': np.random.uniform(0.1, 1.0)
+            }
+        except Exception as e:
+            app.logger.error(f"Error getting performance metrics: {str(e)}")
+            return {
+                'response_time': 0,
+                'throughput': 0,
+                'page_faults': 0,
+                'swap_rate': 0
+            }
 
     def record_stats(self):
-        self.memory_history.append(self.get_memory_stats())
-        self.cache_history.append(self.get_cache_stats())
-        metrics = self.get_performance_metrics()
-        self.performance_metrics['response_times'].append(metrics['response_time'])
-        self.performance_metrics['throughput'].append(metrics['throughput'])
-        self.performance_metrics['page_faults'].append(metrics['page_faults'])
-        self.performance_metrics['swap_usage'].append(metrics['swap_rate'])
-        self.timestamps.append(datetime.now())
+        try:
+            self.memory_history.append(self.get_memory_stats())
+            self.cache_history.append(self.get_cache_stats())
+            metrics = self.get_performance_metrics()
+            self.performance_metrics['response_times'].append(metrics['response_time'])
+            self.performance_metrics['throughput'].append(metrics['throughput'])
+            self.performance_metrics['page_faults'].append(metrics['page_faults'])
+            self.performance_metrics['swap_usage'].append(metrics['swap_rate'])
+            self.timestamps.append(datetime.now())
+        except Exception as e:
+            app.logger.error(f"Error recording stats: {str(e)}")
 
+# Initialize the monitor
 monitor = MemoryMonitor()
+
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({'error': 'Not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        app.logger.error(f"Error rendering template: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/real-time-stats')
 def get_real_time_stats():
-    monitor.record_stats()
-    return jsonify({
-        'memory': monitor.memory_history[-1],
-        'cache': monitor.cache_history[-1],
-        'timestamp': monitor.timestamps[-1].strftime('%H:%M:%S')
-    })
+    try:
+        monitor.record_stats()
+        return jsonify({
+            'memory': monitor.memory_history[-1],
+            'cache': monitor.cache_history[-1],
+            'timestamp': monitor.timestamps[-1].strftime('%H:%M:%S')
+        })
+    except Exception as e:
+        app.logger.error(f"Error getting real-time stats: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/optimize-memory')
 def optimize_memory():
-    before_stats = monitor.get_memory_stats()
-    monitor.optimization_history['memory']['before'] = before_stats
-    
-    # Simulate memory optimization
-    time.sleep(2)
-    
-    # Simulate improved memory stats
-    after_stats = {
-        'total': before_stats['total'],
-        'available': before_stats['available'] * 1.2,  # 20% improvement
-        'used': before_stats['used'] * 0.8,  # 20% reduction
-        'free': before_stats['free'] * 1.2,  # 20% improvement
-        'percent': before_stats['percent'] * 0.8  # 20% reduction
-    }
-    
-    monitor.optimization_history['memory']['after'] = after_stats
-    
-    return jsonify({
-        'before': before_stats,
-        'after': after_stats,
-        'improvement': compare_performance(
-            before_stats['percent'],
-            after_stats['percent']
-        )
-    })
+    try:
+        before_stats = monitor.get_memory_stats()
+        monitor.optimization_history['memory']['before'] = before_stats
+        
+        # Simulate memory optimization
+        time.sleep(2)
+        
+        # Simulate improved memory stats
+        after_stats = {
+            'total': before_stats['total'],
+            'available': before_stats['available'] * 1.2,  # 20% improvement
+            'used': before_stats['used'] * 0.8,  # 20% reduction
+            'free': before_stats['free'] * 1.2,  # 20% improvement
+            'percent': before_stats['percent'] * 0.8  # 20% reduction
+        }
+        
+        monitor.optimization_history['memory']['after'] = after_stats
+        
+        return jsonify({
+            'before': before_stats,
+            'after': after_stats,
+            'improvement': compare_performance(
+                before_stats['percent'],
+                after_stats['percent']
+            )
+        })
+    except Exception as e:
+        app.logger.error(f"Error optimizing memory: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/optimize-cache')
 def optimize_cache():
@@ -377,4 +442,7 @@ def compare_performance(before, after):
     }
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    try:
+        app.run(debug=True)
+    except Exception as e:
+        app.logger.error(f"Error starting the application: {str(e)}")
