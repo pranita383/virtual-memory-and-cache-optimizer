@@ -13,9 +13,9 @@ document.getElementById('cacheForm').addEventListener('submit', function(event) 
     })
     .then(response => response.json())
     .then(data => {
-        document.getElementById('hits').textContent = `Hits: ${data.hits}`;
-        document.getElementById('misses').textContent = `Misses: ${data.misses}`;
-        document.getElementById('hit_ratio').textContent = `Hit Ratio: ${data.hit_ratio.toFixed(2)}`;
+        document.getElementById('hits').textContent = Hits: ${data.hits};
+        document.getElementById('misses').textContent = Misses: ${data.misses};
+        document.getElementById('hit_ratio').textContent = Hit Ratio: ${data.hit_ratio.toFixed(2)};
     })
     .catch(error => console.error('Error:', error));
 });
