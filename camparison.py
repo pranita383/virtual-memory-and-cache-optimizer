@@ -1,20 +1,24 @@
 from flask import Flask, jsonify, render_template
-import psutil
 import time
 import numpy as np
 from datetime import datetime
+import logging
+import os
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import logging
+from app.models import MemoryStats, CacheStats, PerformanceMetrics, MemoryOptimizer, CacheOptimizer
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
+# Initialize Flask app with correct template and static folders
+template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'templates'))
+static_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'statics'))
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir, static_url_path='/static')
 
 class MemoryMonitor:
     def __init__(self):
@@ -22,8 +26,8 @@ class MemoryMonitor:
         self.cache_history = []
         self.timestamps = []
         self.optimization_history = {
-            'memory': {'before': None, 'after': None},
-            'cache': {'before': None, 'after': None}
+            'memory': {'before': None, 'after': None, 'details': []},
+            'cache': {'before': None, 'after': None, 'details': []}
         }
         self.performance_metrics = {
             'response_times': [],
@@ -33,86 +37,45 @@ class MemoryMonitor:
         }
 
     def get_memory_stats(self):
-        try:
-            vm = psutil.virtual_memory()
-            swap = psutil.swap_memory()
-            return {
-                'total': vm.total,
-                'available': vm.available,
-                'used': vm.used,
-                'free': vm.free,
-                'percent': vm.percent,
-                'swap_total': swap.total,
-                'swap_used': swap.used,
-                'swap_free': swap.free,
-                'swap_percent': swap.percent
-            }
-        except Exception as e:
-            app.logger.error(f"Error getting memory stats: {str(e)}")
-            return {
-                'total': 0,
-                'available': 0,
-                'used': 0,
-                'free': 0,
-                'percent': 0,
-                'swap_total': 0,
-                'swap_used': 0,
-                'swap_free': 0,
-                'swap_percent': 0
-            }
+        memory_stats = MemoryStats.get_current()
+        return memory_stats.to_dict()
 
     def get_cache_stats(self):
-        # Simulated cache statistics
-        try:
-            return {
-                'hits': np.random.randint(80, 95),
-                'misses': np.random.randint(5, 20),
-                'hit_ratio': np.random.uniform(0.8, 0.95),
-                'access_time': np.random.uniform(0.1, 0.5),
-                'eviction_rate': np.random.uniform(0.1, 0.3),
-                'write_back_rate': np.random.uniform(0.2, 0.4)
-            }
-        except Exception as e:
-            app.logger.error(f"Error getting cache stats: {str(e)}")
-            return {
-                'hits': 0,
-                'misses': 0,
-                'hit_ratio': 0,
-                'access_time': 0,
-                'eviction_rate': 0,
-                'write_back_rate': 0
-            }
+        cache_stats = CacheStats.get_current()
+        return cache_stats.to_dict()
 
     def get_performance_metrics(self):
-        # Simulated performance metrics
-        try:
-            return {
-                'response_time': np.random.uniform(0.1, 2.0),
-                'throughput': np.random.uniform(1000, 5000),
-                'page_faults': np.random.randint(10, 100),
-                'swap_rate': np.random.uniform(0.1, 1.0)
-            }
-        except Exception as e:
-            app.logger.error(f"Error getting performance metrics: {str(e)}")
-            return {
-                'response_time': 0,
-                'throughput': 0,
-                'page_faults': 0,
-                'swap_rate': 0
-            }
+        metrics = PerformanceMetrics.get_current()
+        return metrics.to_dict()
 
     def record_stats(self):
         try:
-            self.memory_history.append(self.get_memory_stats())
-            self.cache_history.append(self.get_cache_stats())
+            memory_stats = self.get_memory_stats()
+            cache_stats = self.get_cache_stats()
             metrics = self.get_performance_metrics()
+            
+            self.memory_history.append(memory_stats)
+            self.cache_history.append(cache_stats)
+            
             self.performance_metrics['response_times'].append(metrics['response_time'])
             self.performance_metrics['throughput'].append(metrics['throughput'])
             self.performance_metrics['page_faults'].append(metrics['page_faults'])
             self.performance_metrics['swap_usage'].append(metrics['swap_rate'])
+            
             self.timestamps.append(datetime.now())
+            
+            # Limit history length
+            max_history = 60  # 1 minute at 1 second intervals
+            if len(self.memory_history) > max_history:
+                self.memory_history = self.memory_history[-max_history:]
+                self.cache_history = self.cache_history[-max_history:]
+                self.timestamps = self.timestamps[-max_history:]
+                self.performance_metrics['response_times'] = self.performance_metrics['response_times'][-max_history:]
+                self.performance_metrics['throughput'] = self.performance_metrics['throughput'][-max_history:]
+                self.performance_metrics['page_faults'] = self.performance_metrics['page_faults'][-max_history:]
+                self.performance_metrics['swap_usage'] = self.performance_metrics['swap_usage'][-max_history:]
         except Exception as e:
-            app.logger.error(f"Error recording stats: {str(e)}")
+            logger.error(f"Error recording stats: {str(e)}")
 
 # Initialize the monitor
 monitor = MemoryMonitor()
@@ -131,7 +94,7 @@ def index():
     try:
         return render_template('index.html')
     except Exception as e:
-        app.logger.error(f"Error rendering template: {str(e)}")
+        logger.error(f"Error rendering template: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/real-time-stats')
@@ -144,7 +107,7 @@ def get_real_time_stats():
             'timestamp': monitor.timestamps[-1].strftime('%H:%M:%S')
         })
     except Exception as e:
-        app.logger.error(f"Error getting real-time stats: {str(e)}")
+        logger.error(f"Error getting real-time stats: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/optimize-memory')
@@ -153,31 +116,47 @@ def optimize_memory():
         before_stats = monitor.get_memory_stats()
         monitor.optimization_history['memory']['before'] = before_stats
         
-        # Simulate memory optimization
-        time.sleep(2)
+        # Perform real memory optimization with details
+        success, message, details = MemoryOptimizer.optimize_with_details()
+        monitor.optimization_history['memory']['details'] = details
         
-        # Simulate improved memory stats
-        after_stats = {
-            'total': before_stats['total'],
-            'available': before_stats['available'] * 1.2,  # 20% improvement
-            'used': before_stats['used'] * 0.8,  # 20% reduction
-            'free': before_stats['free'] * 1.2,  # 20% improvement
-            'percent': before_stats['percent'] * 0.8  # 20% reduction
-        }
+        if not success:
+            logger.warning(f"Memory optimization failed: {message}")
+            return jsonify({
+                'success': False,
+                'message': message,
+                'before': before_stats,
+                'after': before_stats,
+                'details': details,
+                'improvement': {
+                    'before_ratio': before_stats['percent'],
+                    'after_ratio': before_stats['percent'],
+                    'improvement': 0
+                }
+            })
         
+        # Get memory stats after optimization
+        after_stats = monitor.get_memory_stats()
         monitor.optimization_history['memory']['after'] = after_stats
         
         return jsonify({
+            'success': True,
+            'message': message,
             'before': before_stats,
             'after': after_stats,
+            'details': details,
             'improvement': compare_performance(
                 before_stats['percent'],
                 after_stats['percent']
             )
         })
     except Exception as e:
-        app.logger.error(f"Error optimizing memory: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        logger.error(f"Error optimizing memory: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f"Error during memory optimization: {str(e)}",
+            'error': str(e)
+        }), 500
 
 @app.route('/api/optimize-cache')
 def optimize_cache():
@@ -185,30 +164,51 @@ def optimize_cache():
         before_stats = monitor.get_cache_stats()
         monitor.optimization_history['cache']['before'] = before_stats
         
-        # Simulate cache optimization
-        time.sleep(2)
+        # Perform real cache optimization with details
+        success, message, details = CacheOptimizer.optimize_with_details()
+        monitor.optimization_history['cache']['details'] = details
         
-        # Simulate improved cache stats
-        after_stats = {
-            'hits': min(99, before_stats['hits'] * 1.15),  # 15% improvement
-            'misses': max(1, before_stats['misses'] * 0.7),  # 30% reduction
-            'hit_ratio': min(0.99, before_stats['hit_ratio'] * 1.15),  # 15% improvement
-            'access_time': before_stats['access_time'] * 0.7  # 30% faster
-        }
+        if not success:
+            logger.warning(f"Cache optimization failed: {message}")
+            return jsonify({
+                'success': False,
+                'message': message,
+                'before': before_stats,
+                'after': before_stats,
+                'details': details,
+                'improvement': {
+                    'before_ratio': before_stats['hit_ratio'],
+                    'after_ratio': before_stats['hit_ratio'],
+                    'improvement': 0
+                }
+            })
+        
+        # Get cache stats after optimization
+        after_stats = monitor.get_cache_stats()
+        
+        # No artificial improvements - show real stats
+        logger.info("Using real cache statistics without artificial improvements")
         
         monitor.optimization_history['cache']['after'] = after_stats
         
         return jsonify({
+            'success': True,
+            'message': message,
             'before': before_stats,
             'after': after_stats,
+            'details': details,
             'improvement': compare_performance(
                 before_stats['hit_ratio'],
                 after_stats['hit_ratio']
             )
         })
     except Exception as e:
-        app.logger.error(f"Error optimizing cache: {str(e)}")
-        return jsonify({'error': 'Error optimizing cache'}), 500
+        logger.error(f"Error optimizing cache: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f"Error during cache optimization: {str(e)}",
+            'error': str(e)
+        }), 500
 
 @app.route('/api/visualization')
 def get_visualization():
@@ -406,66 +406,61 @@ def get_visualization():
         fig.update_layout(
             height=1400,  # Increased height for more charts
             showlegend=True,
-            template='plotly_white',
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
+            template='plotly_dark',  # Change to dark theme for better contrast
+            paper_bgcolor='rgba(45, 52, 54, 1)',  # Dark background
+            plot_bgcolor='rgba(45, 52, 54, 1)',  # Dark background 
             font=dict(
                 family='Segoe UI, sans-serif',
-                size=12
+                size=12,
+                color='#dfe6e9'  # Light colored text for dark background
             ),
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
                 y=1.02,
                 xanchor="right",
-                x=1
+                x=1,
+                font=dict(color='#dfe6e9')  # Light colored legend text
             )
         )
 
-        # Add second y-axis for throughput
+        # Add second y-axis for throughput with better colors
         fig.update_layout(
-            yaxis7=dict(title="Response Time (ms)"),
-            yaxis8=dict(title="Throughput (req/s)", overlaying="y7", side="right")
+            yaxis7=dict(title="Response Time (ms)", titlefont=dict(color='#6c5ce7'), tickfont=dict(color='#dfe6e9')),
+            yaxis8=dict(title="Throughput (req/s)", titlefont=dict(color='#00b894'), tickfont=dict(color='#dfe6e9'), overlaying="y7", side="right")
         )
 
-        # Update axes labels for all charts
-        fig.update_xaxes(title_text="Time", row=1, col=1)
-        fig.update_xaxes(title_text="Time", row=1, col=2)
-        fig.update_yaxes(title_text="Memory Usage (%)", row=1, col=1)
-        fig.update_yaxes(title_text="Cache Hits", row=1, col=2)
-        fig.update_yaxes(title_text="Memory Usage (%)", row=2, col=1)
-        fig.update_yaxes(title_text="GB", row=3, col=1)
-        fig.update_yaxes(title_text="Value", row=3, col=2)
+        # Update axes labels for all charts with better colors
+        fig.update_xaxes(title_text="Time", titlefont=dict(color='#dfe6e9'), tickfont=dict(color='#dfe6e9'), row=1, col=1)
+        fig.update_xaxes(title_text="Time", titlefont=dict(color='#dfe6e9'), tickfont=dict(color='#dfe6e9'), row=1, col=2)
+        fig.update_yaxes(title_text="Memory Usage (%)", titlefont=dict(color='#4a90e2'), tickfont=dict(color='#dfe6e9'), row=1, col=1)
+        fig.update_yaxes(title_text="Cache Hits", titlefont=dict(color='#2ecc71'), tickfont=dict(color='#dfe6e9'), row=1, col=2)
+        fig.update_yaxes(title_text="Memory Usage (%)", titlefont=dict(color='#4a90e2'), tickfont=dict(color='#dfe6e9'), row=2, col=1)
+        fig.update_yaxes(title_text="GB", titlefont=dict(color='#dfe6e9'), tickfont=dict(color='#dfe6e9'), row=3, col=1)
+        fig.update_yaxes(title_text="Value", titlefont=dict(color='#dfe6e9'), tickfont=dict(color='#dfe6e9'), row=3, col=2)
 
         return jsonify(fig.to_dict())
     except Exception as e:
-        app.logger.error(f"Error generating visualization: {str(e)}")
+        logger.error(f"Error generating visualization: {str(e)}")
         return jsonify({'error': 'Error generating visualization'}), 500
 
 def compare_performance(before, after):
-    try:
-        return {
-            "before_ratio": before,
-            "after_ratio": after,
-            "improvement": round(((after - before) / before) * 100, 2)
-        }
-    except ZeroDivisionError:
-        app.logger.error("Cannot calculate improvement: 'before' value is zero")
-        return {
-            "before_ratio": before,
-            "after_ratio": after,
-            "improvement": 0
-        }
-    except Exception as e:
-        app.logger.error(f"Error in compare_performance: {str(e)}")
-        return {
-            "before_ratio": 0,
-            "after_ratio": 0,
-            "improvement": 0
-        }
+    """Calculate performance improvement metrics"""
+    if before <= 0:
+        improvement_percent = 0
+    else:
+        # For memory usage, lower is better, so improvement is negative change
+        # For cache hit ratio, higher is better, so improvement is positive change
+        improvement_percent = ((after - before) / before) * 100
+    
+    return {
+        'before_ratio': before,
+        'after_ratio': after,
+        'improvement': improvement_percent
+    }
 
 if __name__ == '__main__':
     try:
         app.run(debug=True)
     except Exception as e:
-        app.logger.error(f"Error starting the application: {str(e)}")
+        logger.error(f"Error starting the application: {str(e)}")
