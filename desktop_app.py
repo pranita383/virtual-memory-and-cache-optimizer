@@ -126,6 +126,7 @@ class OptimizeWorker(QThread):
 class MemoryMonitorApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(QIcon("icon.ico"))
         
         # Initialize data storage
         self.memory_history = []
@@ -814,6 +815,7 @@ if __name__ == "__main__":
         # Start the application
         print("Creating QApplication...")
         app = QApplication(sys.argv)
+        app.setWindowIcon(QIcon("icon.ico"))
         print("Creating main window...")
         window = MemoryMonitorApp()
         print("Showing main window...")
