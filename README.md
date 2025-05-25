@@ -1,14 +1,13 @@
-# Memory and Cache Monitor
+# Memory and Cache Optimizer
 
-A real-time monitoring tool for system memory and cache performance with optimization capabilities.
+A comprehensive system utility for memory and cache monitoring and optimization, available both as a desktop application and a web interface.
 
 ## Features
 
-- Real-time memory usage monitoring
-- Cache performance tracking
-- Memory optimization
-- Cache optimization
-- Interactive visualizations
+- Real-time memory usage monitoring and optimization
+- Cache performance tracking and optimization
+- Support for Windows, Linux, and macOS
+- Detailed before/after optimization comparisons
 - Performance metrics tracking
 
 ## Installation
@@ -30,50 +29,91 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Usage
+## Quick Start
 
-1. Start the application:
+Run the launcher script to choose your preferred interface:
+
 ```bash
-python app/comparison.py
+python launcher.py
 ```
 
-2. Open your web browser and navigate to:
+This will present a menu where you can select either the desktop application or web interface.
+
+## Usage - Choose Your Interface
+
+This application offers two interface options:
+
+### Option 1: Desktop Application
+
+The desktop application provides a native UI with real-time monitoring and optimization capabilities.
+
+```bash
+python desktop_app.py
+```
+
+For full optimization capabilities, run with administrator privileges:
+- On Windows: Right-click and select "Run as administrator"
+- On Linux/macOS: `sudo python desktop_app.py`
+
+**Advantages:**
+- Native UI performance
+- No browser required
+- More responsive interface
+- Better integration with system
+
+### Option 2: Web Interface
+
+The web interface allows you to access the tool from any browser.
+
+```bash
+python run.py
+```
+
+Then open your web browser and navigate to:
 ```
 http://localhost:5000
 ```
 
-## Features
+**Advantages:**
+- Access from any device on your network
+- No dependencies on desktop libraries
+- May work better on systems without PyQt support
+
+## Feature Details
 
 ### Real-time Monitoring
-- Memory usage statistics
-- Cache performance metrics
+- Memory usage statistics (total, used, free, available)
+- Swap usage tracking
+- Cache performance metrics (hit/miss ratio, access time)
 - System performance indicators
 
 ### Optimization
-- Memory optimization with before/after comparison
-- Cache optimization with performance metrics
-- Visual representation of improvements
+- Memory optimization with real system commands
+- Cache optimization including browser cache clearing
+- Before/after comparison with visual representation
+- Optimization history tracking
 
 ### Visualizations
-- Memory usage over time
+- Memory usage over time graphs
 - Cache performance trends
 - Before/after optimization comparisons
-- Memory allocation distribution
-- System performance metrics
 
-## Error Handling
-
-The application includes comprehensive error handling:
-- Graceful degradation for system metric collection
-- Error logging
-- User-friendly error messages
-- API error responses
-
-## Requirements
+## System Requirements
 
 - Python 3.7+
-- Modern web browser with JavaScript enabled
-- System permissions for memory monitoring
+- For desktop interface: PyQt5
+- For web interface: Modern web browser
+- Administrator privileges for full optimization capabilities
+- Supported operating systems: Windows, Linux, macOS
+
+## Note on Administrator Privileges
+
+Some optimization features require administrator privileges:
+- Memory page file/swap optimization
+- System cache clearing
+- DNS cache flushing
+
+Without admin privileges, the application will still function but with limited optimization capabilities.
 
 ## License
 
