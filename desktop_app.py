@@ -11,6 +11,7 @@ import numpy as np
 import traceback
 import ctypes
 from datetime import datetime
+import psutil
 
 print("Loading PyQt5 modules...")
 try:
@@ -31,6 +32,8 @@ except Exception as e:
 print("Loading application modules...")
 try:
     from app.models import MemoryStats, CacheStats, PerformanceMetrics, MemoryOptimizer, CacheOptimizer
+    from app.components.memory_graph import MemoryGraph
+    from app.components.performance_graphs import PerformanceGraphs
     print("Application modules loaded successfully")
 except Exception as e:
     print(f"Error loading application modules: {e}")
@@ -64,6 +67,7 @@ class WorkerSignals(QObject):
     '''
     finished = pyqtSignal(bool, str, dict, dict)
     error = pyqtSignal(str)
+    progress = pyqtSignal(dict)  # Signal for progress updates
 
 
 class OptimizeWorker(QThread):
@@ -74,18 +78,22 @@ class OptimizeWorker(QThread):
         super().__init__()
         self.optimize_type = optimize_type
         self.signals = WorkerSignals()
-        
+        # Connect the progress signal from signals object
+        self.progress = self.signals.progress
+    
     def run(self):
         try:
             if self.optimize_type == 'memory':
                 # Get before stats
                 before_stats = MemoryStats.get_current().to_dict()
+                self.signals.progress.emit({'type': 'memory', 'stats': before_stats})
                 
                 # Run memory optimization
                 success, message, details = MemoryOptimizer.optimize_with_details()
                 
                 # Get after stats
                 after_stats = MemoryStats.get_current().to_dict()
+                self.signals.progress.emit({'type': 'memory', 'stats': after_stats})
                 
                 # Store details in class attribute
                 MemoryOptimizer.last_optimization_details = details
@@ -93,23 +101,25 @@ class OptimizeWorker(QThread):
             elif self.optimize_type == 'cache':
                 # Get before stats
                 before_stats = CacheStats.get_current().to_dict()
+                self.signals.progress.emit({'type': 'cache', 'stats': before_stats})
                 
                 # Run cache optimization
                 success, message, details = CacheOptimizer.optimize_with_details()
                 
                 # Get after stats
                 after_stats = CacheStats.get_current().to_dict()
+                self.signals.progress.emit({'type': 'cache', 'stats': after_stats})
                 
                 # Store details in class attribute
                 CacheOptimizer.last_optimization_details = details
             else:
                 raise ValueError(f"Unknown optimization type: {self.optimize_type}")
-                
+            
             # Emit results with details
             self.signals.finished.emit(success, message, before_stats, after_stats)
             
         except Exception as e:
-            logger.error(f"Error in optimization worker: {e}")
+            logger.error(f"Error in optimization worker: {str(e)}")
             self.signals.error.emit(str(e))
 
 
@@ -128,9 +138,15 @@ class MemoryMonitorApp(QMainWindow):
             'swap_usage': []
         }
         self.optimization_history = {
-            'memory': {'before': None, 'after': None},
-            'cache': {'before': None, 'after': None}
+            'memory': {'before': None, 'after': None, 'details': []},
+            'cache': {'before': None, 'after': None, 'details': []}
         }
+        
+        # Initialize CPU history
+        self.cpu_history = []
+        
+        # Initialize optimization flags
+        self.optimization_in_progress = False
         
         # Setup UI
         self.setWindowTitle("Memory & Cache Optimizer")
@@ -182,6 +198,17 @@ class MemoryMonitorApp(QMainWindow):
                 "Some optimization features will be limited. For full functionality, "
                 "please restart the application with administrator rights."
             )
+        
+        # Create memory graph widget
+        self.memory_graph = MemoryGraph(self)
+        self.main_layout.addWidget(self.memory_graph)
+        
+        # Create performance graphs widget
+        self.performance_graphs = PerformanceGraphs(self)
+        
+        # Add performance graphs to the dashboard tab
+        dashboard_layout = self.dashboard_tab.layout()
+        dashboard_layout.addWidget(self.performance_graphs)
         
         # Initial update
         self.update_stats()
@@ -339,44 +366,92 @@ class MemoryMonitorApp(QMainWindow):
             cache_stats = CacheStats.get_current()
             perf_metrics = PerformanceMetrics.get_current()
             
+            # Get CPU usage
+            cpu_percent = psutil.cpu_percent()
+            self.cpu_history.append(cpu_percent)
+            
             # Convert to dictionaries
             memory_dict = memory_stats.to_dict()
             cache_dict = cache_stats.to_dict()
             perf_dict = perf_metrics.to_dict()
             
             # Store in history
+            current_time = datetime.now()
             self.memory_history.append(memory_dict)
             self.cache_history.append(cache_dict)
-            self.timestamps.append(datetime.now())
+            self.timestamps.append(current_time)
             
             self.performance_metrics['response_times'].append(perf_dict['response_time'])
             self.performance_metrics['throughput'].append(perf_dict['throughput'])
             self.performance_metrics['page_faults'].append(perf_dict['page_faults'])
             self.performance_metrics['swap_usage'].append(perf_dict['swap_rate'])
             
+            # Ensure all arrays have the same length
+            min_length = min(
+                len(self.memory_history),
+                len(self.cache_history),
+                len(self.timestamps),
+                len(self.cpu_history),
+                len(self.performance_metrics['response_times']),
+                len(self.performance_metrics['throughput']),
+                len(self.performance_metrics['page_faults']),
+                len(self.performance_metrics['swap_usage'])
+            )
+            
+            # Trim all arrays to the same length
+            self.memory_history = self.memory_history[-min_length:]
+            self.cache_history = self.cache_history[-min_length:]
+            self.timestamps = self.timestamps[-min_length:]
+            self.cpu_history = self.cpu_history[-min_length:]
+            self.performance_metrics['response_times'] = self.performance_metrics['response_times'][-min_length:]
+            self.performance_metrics['throughput'] = self.performance_metrics['throughput'][-min_length:]
+            self.performance_metrics['page_faults'] = self.performance_metrics['page_faults'][-min_length:]
+            self.performance_metrics['swap_usage'] = self.performance_metrics['swap_usage'][-min_length:]
+            
             # Limit history length to prevent using too much memory
             max_history = 60  # 1 minute at 1 second intervals
-            if len(self.memory_history) > max_history:
+            if min_length > max_history:
                 self.memory_history = self.memory_history[-max_history:]
                 self.cache_history = self.cache_history[-max_history:]
                 self.timestamps = self.timestamps[-max_history:]
+                self.cpu_history = self.cpu_history[-max_history:]
                 self.performance_metrics['response_times'] = self.performance_metrics['response_times'][-max_history:]
                 self.performance_metrics['throughput'] = self.performance_metrics['throughput'][-max_history:]
                 self.performance_metrics['page_faults'] = self.performance_metrics['page_faults'][-max_history:]
                 self.performance_metrics['swap_usage'] = self.performance_metrics['swap_usage'][-max_history:]
             
-            # Update dashboard UI
+            # Update all UI components
             self.update_dashboard_ui(memory_dict, cache_dict)
-            
-            # Update memory tab
             self.update_memory_tab(memory_dict)
-            
-            # Update cache tab
             self.update_cache_tab(cache_dict)
             
+            # Update performance graphs
+            self.performance_graphs.update_all_graphs(
+                self.memory_history,
+                self.cpu_history,
+                self.cache_history,
+                self.performance_metrics,
+                self.timestamps
+            )
+            
         except Exception as e:
-            logger.error(f"Error updating stats: {e}")
+            logger.error(f"Error updating stats: {str(e)}")
             self.status_label.setText(f"Error updating stats: {str(e)}")
+            
+            # Try to recover from error by resetting histories
+            try:
+                self.memory_history = []
+                self.cache_history = []
+                self.timestamps = []
+                self.cpu_history = []
+                self.performance_metrics = {
+                    'response_times': [],
+                    'throughput': [],
+                    'page_faults': [],
+                    'swap_usage': []
+                }
+            except Exception as reset_error:
+                logger.error(f"Error resetting histories: {str(reset_error)}")
     
     def update_dashboard_ui(self, memory_dict, cache_dict):
         # Update memory stats
@@ -447,151 +522,195 @@ class MemoryMonitorApp(QMainWindow):
             self.cache_table.setItem(i, 1, QTableWidgetItem(value))
     
     def optimize_memory(self):
-        # Disable all optimize buttons while running
-        self.memory_optimize_btn.setEnabled(False)
-        self.memory_optimize_detail_btn.setEnabled(False)
-        self.memory_optimize_opt_btn.setEnabled(False)
-        self.memory_optimize_btn.setText("Optimizing...")
-        self.memory_optimize_detail_btn.setText("Optimizing...")
-        self.memory_optimize_opt_btn.setText("Optimizing...")
-        self.status_label.setText("Optimizing memory...")
-        
-        # Create worker thread
-        self.memory_worker = OptimizeWorker('memory')
-        
-        # Connect signals
-        self.memory_worker.signals.finished.connect(self.on_memory_optimization_finished)
-        self.memory_worker.signals.error.connect(self.on_optimization_error)
-        
-        # Start worker
-        self.memory_worker.start()
+        try:
+            if self.optimization_in_progress:
+                return
+                
+            self.optimization_in_progress = True
+            
+            # Disable all optimize buttons while running
+            self.memory_optimize_btn.setEnabled(False)
+            self.memory_optimize_detail_btn.setEnabled(False)
+            self.memory_optimize_opt_btn.setEnabled(False)
+            self.memory_optimize_btn.setText("Optimizing...")
+            self.memory_optimize_detail_btn.setText("Optimizing...")
+            self.memory_optimize_opt_btn.setText("Optimizing...")
+            self.status_label.setText("Optimizing memory...")
+            
+            # Create worker thread
+            self.memory_worker = OptimizeWorker('memory')
+            
+            # Connect signals
+            self.memory_worker.signals.finished.connect(self.on_memory_optimization_finished)
+            self.memory_worker.signals.error.connect(self.on_optimization_error)
+            self.memory_worker.signals.progress.connect(self.on_optimization_progress)
+            
+            # Start worker
+            self.memory_worker.start()
+            
+        except Exception as e:
+            logger.error(f"Error starting memory optimization: {str(e)}")
+            self.on_optimization_error(str(e))
     
     def optimize_cache(self):
-        # Disable all optimize buttons while running
-        self.cache_optimize_btn.setEnabled(False)
-        self.cache_optimize_detail_btn.setEnabled(False)
-        self.cache_optimize_opt_btn.setEnabled(False)
-        self.cache_optimize_btn.setText("Optimizing...")
-        self.cache_optimize_detail_btn.setText("Optimizing...")
-        self.cache_optimize_opt_btn.setText("Optimizing...")
-        self.status_label.setText("Optimizing cache...")
-        
-        # Create worker thread specifically for cache optimization
-        self.cache_worker = OptimizeWorker('cache')  # Make sure this is 'cache' and not 'memory'
-        
-        # Connect signals
-        self.cache_worker.signals.finished.connect(self.on_cache_optimization_finished)
-        self.cache_worker.signals.error.connect(self.on_optimization_error)
-        
-        # Start worker
-        self.cache_worker.start()
+        try:
+            if self.optimization_in_progress:
+                return
+                
+            self.optimization_in_progress = True
+            
+            # Disable all optimize buttons while running
+            self.cache_optimize_btn.setEnabled(False)
+            self.cache_optimize_detail_btn.setEnabled(False)
+            self.cache_optimize_opt_btn.setEnabled(False)
+            self.cache_optimize_btn.setText("Optimizing...")
+            self.cache_optimize_detail_btn.setText("Optimizing...")
+            self.cache_optimize_opt_btn.setText("Optimizing...")
+            self.status_label.setText("Optimizing cache...")
+            
+            # Create worker thread
+            self.cache_worker = OptimizeWorker('cache')
+            
+            # Connect signals
+            self.cache_worker.signals.finished.connect(self.on_cache_optimization_finished)
+            self.cache_worker.signals.error.connect(self.on_optimization_error)
+            self.cache_worker.signals.progress.connect(self.on_optimization_progress)
+            
+            # Start worker
+            self.cache_worker.start()
+            
+        except Exception as e:
+            logger.error(f"Error starting cache optimization: {str(e)}")
+            self.on_optimization_error(str(e))
+    
+    def on_optimization_progress(self, progress_data):
+        """Handle progress updates during optimization"""
+        try:
+            # Update graphs based on progress
+            if progress_data['type'] == 'memory':
+                self.memory_history.append(progress_data['stats'])
+                self.timestamps.append(datetime.now())
+            elif progress_data['type'] == 'cache':
+                self.cache_history.append(progress_data['stats'])
+                self.timestamps.append(datetime.now())
+            
+            # Update UI
+            self.update_stats()
+            
+        except Exception as e:
+            logger.error(f"Error handling optimization progress: {str(e)}")
     
     def on_memory_optimization_finished(self, success, message, before_stats, after_stats):
-        # Re-enable all optimize buttons
-        self.memory_optimize_btn.setEnabled(True)
-        self.memory_optimize_detail_btn.setEnabled(True)
-        self.memory_optimize_opt_btn.setEnabled(True)
-        self.memory_optimize_btn.setText("Optimize Memory")
-        self.memory_optimize_detail_btn.setText("Optimize Memory")
-        self.memory_optimize_opt_btn.setText("Optimize Memory")
-        self.status_label.setText("Memory optimization complete")
-        
-        # Get detailed optimization results
-        details = MemoryOptimizer.last_optimization_details if hasattr(MemoryOptimizer, 'last_optimization_details') else []
-        
-        # Create a detailed report
-        detailed_message = f"{message}\n\nOptimization steps performed:\n"
-        if details:
-            for step in details:
-                if isinstance(step, tuple) and len(step) >= 2:
-                    step_name, step_result = step[0], step[1]
-                    # Skip EmptyStandbyList errors
-                    if "EmptyStandbyList.exe" in str(step_result):
-                        continue
-                    detailed_message += f"✓ {step_name}: {step_result}\n"
+        try:
+            # Re-enable all optimize buttons
+            self.memory_optimize_btn.setEnabled(True)
+            self.memory_optimize_detail_btn.setEnabled(True)
+            self.memory_optimize_opt_btn.setEnabled(True)
+            self.memory_optimize_btn.setText("Optimize Memory")
+            self.memory_optimize_detail_btn.setText("Optimize Memory")
+            self.memory_optimize_opt_btn.setText("Optimize Memory")
+            self.status_label.setText("Memory optimization complete")
+            
+            # Update the graph
+            self.memory_graph.update_graph(before_stats, after_stats)
+            
+            # Create concise message
+            if success:
+                improvement = before_stats['percent'] - after_stats['percent']
+                if improvement > 0.5:
+                    concise_msg = f"Memory optimized: {improvement:.1f}% improvement"
+                elif improvement > 0:
+                    concise_msg = f"Memory slightly optimized: {improvement:.1f}% improvement\nSmall improvements are normal when system is already running efficiently"
                 else:
-                    # Skip if it's a string containing EmptyStandbyList
-                    if isinstance(step, str) and "EmptyStandbyList.exe" in step:
-                        continue
-                    detailed_message += f"✓ {step}\n"
-        else:
-            detailed_message += "No detailed information available"
-        
-        if success:
-            QMessageBox.information(self, "Optimization Complete", detailed_message)
-        else:
-            QMessageBox.warning(self, "Optimization Warning", detailed_message)
-        
-        # Store optimization history
-        self.optimization_history['memory']['before'] = before_stats
-        self.optimization_history['memory']['after'] = after_stats
-        self.optimization_history['memory']['details'] = details
-        
-        # Update optimization tab
-        self.update_memory_optimization_display(before_stats, after_stats, details)
+                    concise_msg = "System memory is running efficiently\nNo significant optimization needed"
+                
+                # Add temp files info
+                if any("temp files" in str(detail).lower() for detail in MemoryOptimizer.last_optimization_details):
+                    concise_msg += "\nTemp files cleaned"
+                    
+                # Add explanation for negative or small improvements
+                if improvement <= 0.5:
+                    concise_msg += "\n\nNote: Small or negative changes can occur due to:"
+                    concise_msg += "\n• Active system processes"
+                    concise_msg += "\n• Background applications"
+                    concise_msg += "\n• System already running optimally"
+                
+                QMessageBox.information(self, "Optimization Complete", concise_msg)
+            else:
+                QMessageBox.warning(self, "Optimization Warning", "Memory optimization completed with some issues")
+            
+            # Store optimization history
+            self.optimization_history['memory']['before'] = before_stats
+            self.optimization_history['memory']['after'] = after_stats
+            self.optimization_history['memory']['details'] = MemoryOptimizer.last_optimization_details
+            
+            # Update optimization tab
+            self.update_memory_optimization_display(before_stats, after_stats, MemoryOptimizer.last_optimization_details)
+            
+        except Exception as e:
+            logger.error(f"Error in memory optimization finished handler: {str(e)}")
+            self.on_optimization_error(str(e))
+        finally:
+            self.optimization_in_progress = False
     
     def on_cache_optimization_finished(self, success, message, before_stats, after_stats):
-        # Re-enable all optimize buttons
-        self.cache_optimize_btn.setEnabled(True)
-        self.cache_optimize_detail_btn.setEnabled(True)
-        self.cache_optimize_opt_btn.setEnabled(True)
-        self.cache_optimize_btn.setText("Optimize Cache")
-        self.cache_optimize_detail_btn.setText("Optimize Cache")
-        self.cache_optimize_opt_btn.setText("Optimize Cache")
-        self.status_label.setText("Cache optimization complete")
-        
-        # Get detailed optimization results
-        details = CacheOptimizer.last_optimization_details if hasattr(CacheOptimizer, 'last_optimization_details') else []
-        
-        # Create a detailed report
-        detailed_message = f"{message}\n\nOptimization steps performed:\n"
-        if details:
-            for step in details:
-                if isinstance(step, tuple) and len(step) >= 2:
-                    step_name, step_result = step[0], step[1]
-                    # Skip EmptyStandbyList errors
-                    if "EmptyStandbyList.exe" in str(step_result):
-                        continue
-                    detailed_message += f"✓ {step_name}: {step_result}\n"
-                else:
-                    # Skip if it's a string containing EmptyStandbyList
-                    if isinstance(step, str) and "EmptyStandbyList.exe" in step:
-                        continue
-                    detailed_message += f"✓ {step}\n"
-        else:
-            detailed_message += "No detailed information available"
-        
-        if success:
-            QMessageBox.information(self, "Optimization Complete", detailed_message)
-        else:
-            QMessageBox.warning(self, "Optimization Warning", detailed_message)
-        
-        # Store optimization history
-        self.optimization_history['cache']['before'] = before_stats
-        self.optimization_history['cache']['after'] = after_stats
-        self.optimization_history['cache']['details'] = details
-        
-        # Update optimization tab
-        self.update_cache_optimization_display(before_stats, after_stats, details)
+        try:
+            # Re-enable all optimize buttons
+            self.cache_optimize_btn.setEnabled(True)
+            self.cache_optimize_detail_btn.setEnabled(True)
+            self.cache_optimize_opt_btn.setEnabled(True)
+            self.cache_optimize_btn.setText("Optimize Cache")
+            self.cache_optimize_detail_btn.setText("Optimize Cache")
+            self.cache_optimize_opt_btn.setText("Optimize Cache")
+            self.status_label.setText("Cache optimization complete")
+            
+            # Create concise message
+            if success:
+                concise_msg = "Cache optimized successfully"
+                if any("temp files" in str(detail).lower() for detail in CacheOptimizer.last_optimization_details):
+                    concise_msg += "\nTemp files cleaned"
+                QMessageBox.information(self, "Optimization Complete", concise_msg)
+            else:
+                QMessageBox.warning(self, "Optimization Warning", "Cache optimization completed with some issues")
+            
+            # Store optimization history
+            self.optimization_history['cache']['before'] = before_stats
+            self.optimization_history['cache']['after'] = after_stats
+            self.optimization_history['cache']['details'] = CacheOptimizer.last_optimization_details
+            
+            # Update optimization tab
+            self.update_cache_optimization_display(before_stats, after_stats, CacheOptimizer.last_optimization_details)
+            
+        except Exception as e:
+            logger.error(f"Error in cache optimization finished handler: {str(e)}")
+            self.on_optimization_error(str(e))
+        finally:
+            self.optimization_in_progress = False
     
     def on_optimization_error(self, error_message):
-        # Re-enable all optimize buttons
-        self.memory_optimize_btn.setEnabled(True)
-        self.memory_optimize_detail_btn.setEnabled(True)
-        self.memory_optimize_opt_btn.setEnabled(True)
-        self.cache_optimize_btn.setEnabled(True)
-        self.cache_optimize_detail_btn.setEnabled(True)
-        self.cache_optimize_opt_btn.setEnabled(True)
-        
-        self.memory_optimize_btn.setText("Optimize Memory")
-        self.memory_optimize_detail_btn.setText("Optimize Memory")
-        self.memory_optimize_opt_btn.setText("Optimize Memory")
-        self.cache_optimize_btn.setText("Optimize Cache")
-        self.cache_optimize_detail_btn.setText("Optimize Cache")
-        self.cache_optimize_opt_btn.setText("Optimize Cache")
-        
-        self.status_label.setText(f"Error: {error_message}")
-        QMessageBox.critical(self, "Optimization Error", f"Error during optimization: {error_message}")
+        try:
+            # Re-enable all optimize buttons
+            self.memory_optimize_btn.setEnabled(True)
+            self.memory_optimize_detail_btn.setEnabled(True)
+            self.memory_optimize_opt_btn.setEnabled(True)
+            self.cache_optimize_btn.setEnabled(True)
+            self.cache_optimize_detail_btn.setEnabled(True)
+            self.cache_optimize_opt_btn.setEnabled(True)
+            
+            self.memory_optimize_btn.setText("Optimize Memory")
+            self.memory_optimize_detail_btn.setText("Optimize Memory")
+            self.memory_optimize_opt_btn.setText("Optimize Memory")
+            self.cache_optimize_btn.setText("Optimize Cache")
+            self.cache_optimize_detail_btn.setText("Optimize Cache")
+            self.cache_optimize_opt_btn.setText("Optimize Cache")
+            
+            self.status_label.setText("Optimization error")
+            QMessageBox.critical(self, "Error", f"Optimization failed: {error_message}")
+            
+        except Exception as e:
+            logger.error(f"Error in optimization error handler: {str(e)}")
+        finally:
+            self.optimization_in_progress = False
     
     def update_memory_optimization_display(self, before_stats, after_stats, details=None):
         # Calculate improvement
@@ -600,13 +719,26 @@ class MemoryMonitorApp(QMainWindow):
         
         if before_percent > 0:
             improvement = ((before_percent - after_percent) / before_percent) * 100
-            improvement_text = f"+{improvement:.1f}%" if improvement > 0 else f"{improvement:.1f}%"
+            if improvement > 0.5:
+                improvement_text = f"+{improvement:.1f}%"
+            elif improvement > 0:
+                improvement_text = f"slight improvement ({improvement:.1f}%)"
+            else:
+                improvement_text = "system already optimal"
         else:
             improvement = 0
             improvement_text = "N/A"
         
         # Create detailed report text
-        result_text = f"Memory usage reduced from {before_percent:.1f}% to {after_percent:.1f}% (Improvement: {improvement_text})"
+        result_text = f"Memory usage: {before_percent:.1f}% → {after_percent:.1f}% ({improvement_text})"
+        
+        # Add system status explanation
+        if after_percent < 60:
+            result_text += "\nSystem Status: Good - Memory usage is within normal range"
+        elif after_percent < 80:
+            result_text += "\nSystem Status: Fair - Consider closing unused applications"
+        else:
+            result_text += "\nSystem Status: High - Recommend freeing up memory"
         
         # Add details if available
         if details:
